@@ -299,8 +299,10 @@ To use the server with Claude.ai, Lovable, or any cloud-based tool, deploy it to
 3. Connect your GitHub repo
 4. Set environment variables in the Railway dashboard:
    - `APIDOG_SITE_ID=451700`
+   - `HTTP_MODE=true`
    - `SALLA_CLIENT_ID=` (when ready)
    - `SALLA_CLIENT_SECRET=` (when ready)
+   - Do not set `PORT` manually; Railway injects it at runtime
 5. Railway will give you a public URL like `https://salla-mcp-server.up.railway.app`
 
 ### Option B — Render (free tier available)
@@ -310,7 +312,10 @@ To use the server with Claude.ai, Lovable, or any cloud-based tool, deploy it to
 3. Connect your repo
 4. Set build command: `npm install && npm run build`
 5. Set start command: `npm start`
-6. Add environment variables
+6. Add environment variables:
+   - `APIDOG_SITE_ID=451700`
+   - `HTTP_MODE=true`
+   - Leave `PORT` unset unless your platform requires a fixed value
 7. Deploy
 
 ### Option C — Your own VPS
