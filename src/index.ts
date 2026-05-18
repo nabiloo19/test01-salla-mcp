@@ -35,10 +35,17 @@ else dotenv.config();
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const APIDOG_SITE_ID = process.env.APIDOG_SITE_ID ?? "451700";
-const HTTP_MODE = process.env.HTTP_MODE === "true";
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 const SERVER_NAME = "salla-mcp-server";
 const SERVER_VERSION = "1.0.0";
+const DEPLOYMENT_HTTP_HINT =
+  Boolean(process.env.RAILWAY_ENVIRONMENT) ||
+  Boolean(process.env.RAILWAY_PROJECT_ID) ||
+  Boolean(process.env.RENDER) ||
+  (Boolean(process.env.PORT) && process.env.HTTP_MODE == null);
+const HTTP_MODE =
+  process.env.HTTP_MODE === "true" ||
+  (process.env.HTTP_MODE == null && DEPLOYMENT_HTTP_HINT);
 
 // ── Initialise APIDog proxy ────────────────────────────────────────────────
 const apidogProxy = new ApidogProxy(APIDOG_SITE_ID);

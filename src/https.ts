@@ -22,6 +22,10 @@ export function startHttpServer(
     string,
     { server: Server; transport: SSEServerTransport }
   >();
+  const onServerError = (err: NodeJS.ErrnoException) => {
+    const message = err.message || String(err);
+    process.stderr.write(`[Salla MCP HTTP] Listen error: ${message}\n`);
+  };
 
   const httpServer = http.createServer(async (req, res) => {
     // ── CORS headers — required for browser-based clients ──────────────
@@ -143,6 +147,7 @@ export function startHttpServer(
     );
   });
 
+  httpServer.on("error", onServerError);
   httpServer.listen(port, () => {
     process.stderr.write(
       `[Salla MCP HTTP] Server listening on port ${port}\n`
