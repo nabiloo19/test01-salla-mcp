@@ -58,16 +58,23 @@ function createMcpServer(): Server {
 
   // ── tools/list ───────────────────────────────────────────────────────────
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    await apidogProxy.init();
-
-    const knowledgeTools: Tool[] = apidogProxy.getTools().map((t) => ({
-      name: t.name,
-      description: t.description ?? t.name,
-      inputSchema: (t.inputSchema as Tool["inputSchema"]) ?? {
-        type: "object" as const,
-        properties: {},
-      },
-    }));
+    let knowledgeTools: Tool[] = [];
+    try {
+      await apidogProxy.init();
+      knowledgeTools = apidogProxy.getTools().map((t) => ({
+        name: t.name,
+        description: t.description ?? t.name,
+        inputSchema: (t.inputSchema as Tool["inputSchema"]) ?? {
+          type: "object" as const,
+          properties: {},
+        },
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `[Salla MCP] Knowledge layer unavailable during tools/list: ${message}\n`
+      );
+    }
 
     const actionTools: Tool[] = ACTION_TOOLS.map((t) => ({
       name: t.name,
@@ -145,15 +152,6 @@ async function main() {
     }\n`
   );
 
-  // Pre-init APIDog
-  try {
-    await apidogProxy.init();
-  } catch {
-    process.stderr.write(
-      "[Salla MCP] Warning: APIDog failed to initialise at startup. Will retry on first call.\n"
-    );
-  }
-
   if (HTTP_MODE) {
     // HTTP/SSE mode — for Railway, Claude.ai, ChatGPT, Lovable
     startHttpServer(createMcpServer, PORT);
@@ -164,6 +162,12 @@ async function main() {
     await server.connect(transport);
     process.stderr.write("[Salla MCP] Server running — waiting for tool calls\n");
   }
+
+  void apidogProxy.init().catch(() => {
+    process.stderr.write(
+      "[Salla MCP] Warning: APIDog failed to initialise in background. Will retry on the next knowledge request.\n"
+    );
+  });
 
   // Graceful shutdown
   const shutdown = () => {

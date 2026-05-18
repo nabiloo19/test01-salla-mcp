@@ -247,7 +247,11 @@ The server must be publicly accessible over HTTP/HTTPS to connect to Claude.ai. 
 1. Go to [claude.ai](https://claude.ai)
 2. Click your profile → **Settings** → **Integrations**
 3. Click **Add Integration**
-4. Enter your deployed server URL
+4. Enter your deployed MCP endpoint URL:
+
+```text
+https://your-server.example.com/mcp
+```
 5. Click **Connect**
 
 ### Step 3 — Test it
@@ -259,17 +263,15 @@ What can you help me with for Salla?
 
 ---
 
-## Adding to ChatGPT (via GPT Actions)
+## Adding to ChatGPT
 
-ChatGPT uses a different protocol (OpenAPI/REST) rather than MCP natively. To connect:
+If your ChatGPT workspace supports remote MCP servers, use the deployed MCP endpoint directly:
 
-### Option A — Use a bridge (recommended for now)
-Tools like [mcp-bridge](https://github.com/secretiverhino/mcp-bridge) can expose an MCP server as a REST API that ChatGPT Actions can call. This is the fastest path.
+```text
+https://your-server.example.com/mcp
+```
 
-### Option B — Deploy as an HTTP server
-Convert the action layer to a REST API and register it as a GPT Action with a custom OpenAPI spec. This is more work but gives the cleanest ChatGPT integration.
-
-For now, Claude Desktop and Cursor are the fastest ways to test.
+If your ChatGPT environment only supports actions or OpenAPI tools, you will still need a bridge or a REST wrapper.
 
 ---
 
@@ -283,7 +285,11 @@ Lovable needs a publicly accessible URL. See [Deployment](#deployment) below.
 ### Step 2 — Connect in Lovable
 1. Open your Lovable project
 2. Go to **Settings → Integrations → MCP**
-3. Add your deployed server URL
+3. Add your deployed MCP endpoint URL:
+
+```text
+https://your-server.example.com/mcp
+```
 4. Click **Connect**
 
 ---
@@ -304,6 +310,12 @@ To use the server with Claude.ai, Lovable, or any cloud-based tool, deploy it to
    - `SALLA_CLIENT_SECRET=` (when ready)
    - Do not set `PORT` manually; Railway injects it at runtime
 5. Railway will give you a public URL like `https://salla-mcp-server.up.railway.app`
+
+Use this MCP endpoint in hosted clients:
+
+```text
+https://salla-mcp-server.up.railway.app/mcp
+```
 
 ### Option B — Render (free tier available)
 
@@ -409,6 +421,11 @@ That's it. The new tool is automatically available to any connected AI assistant
 - Make sure you have Node.js 18+
 - Make sure you have internet access
 - Run `npx apidog-mcp-server@latest --site-id=451700` directly to test APIDog in isolation
+
+### Hosted client says "not connected" or shows auth/setup errors
+- Make sure you are using the MCP endpoint URL ending in `/mcp`, not just the site root
+- Check `https://your-server.example.com/health` first; it should return HTTP `200`
+- If `/health` works but tool discovery fails, inspect server logs for APIDog startup or network errors
 
 ### "Cannot find module" errors
 - Run `npm run build` again

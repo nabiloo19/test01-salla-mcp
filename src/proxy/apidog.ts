@@ -56,7 +56,10 @@ export class ApidogProxy {
   async init(): Promise<void> {
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = this._doInit();
+    this.initPromise = this._doInit().catch((err) => {
+      this.initPromise = null;
+      throw err;
+    });
     return this.initPromise;
   }
 
@@ -90,6 +93,12 @@ export class ApidogProxy {
         process.stderr.write(`[APIDog] Process exited with code ${code}\n`);
         this.initialized = false;
         this.process = null;
+        this.initPromise = null;
+        this.tools = [];
+        for (const [id, pending] of this.pendingRequests.entries()) {
+          this.pendingRequests.delete(id);
+          pending.reject(new Error("APIDog process exited"));
+        }
       });
 
       // Parse newline-delimited JSON from APIDog stdout
