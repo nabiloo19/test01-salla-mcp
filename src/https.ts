@@ -18,6 +18,7 @@ export function startHttpServer(
   createMcpServer: () => Server,
   port: number = 3000
 ): http.Server {
+  const host = "0.0.0.0";
   const sessions = new Map<
     string,
     { server: Server; transport: SSEServerTransport }
@@ -148,9 +149,9 @@ export function startHttpServer(
   });
 
   httpServer.on("error", onServerError);
-  httpServer.listen(port, () => {
+  httpServer.listen(port, host, () => {
     process.stderr.write(
-      `[Salla MCP HTTP] Server listening on port ${port}\n`
+      `[Salla MCP HTTP] Server listening on ${host}:${port}\n`
     );
     process.stderr.write(
       `[Salla MCP HTTP] SSE endpoint: http://localhost:${port}/sse\n`
