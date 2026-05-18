@@ -43,80 +43,83 @@ const SERVER_VERSION = "1.0.0";
 // ── Initialise APIDog proxy ────────────────────────────────────────────────
 const apidogProxy = new ApidogProxy(APIDOG_SITE_ID);
 
-// ── Create MCP server ──────────────────────────────────────────────────────
-const server = new Server(
-  { name: SERVER_NAME, version: SERVER_VERSION },
-  { capabilities: { tools: {} } }
-);
-
-// ── tools/list ─────────────────────────────────────────────────────────────
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  await apidogProxy.init();
-
-  const knowledgeTools: Tool[] = apidogProxy.getTools().map((t) => ({
-    name: t.name,
-    description: t.description ?? t.name,
-    inputSchema: (t.inputSchema as Tool["inputSchema"]) ?? {
-      type: "object" as const,
-      properties: {},
-    },
-  }));
-
-  const actionTools: Tool[] = ACTION_TOOLS.map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema,
-  }));
-
-  const allTools = [...knowledgeTools, ...actionTools];
-
-  process.stderr.write(
-    `[Salla MCP] Serving ${knowledgeTools.length} knowledge tools + ${actionTools.length} action tools\n`
+function createMcpServer(): Server {
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { capabilities: { tools: {} } }
   );
 
-  return { tools: allTools };
-});
+  // ── tools/list ───────────────────────────────────────────────────────────
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    await apidogProxy.init();
 
-// ── tools/call ─────────────────────────────────────────────────────────────
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  const safeArgs = (args ?? {}) as Record<string, unknown>;
+    const knowledgeTools: Tool[] = apidogProxy.getTools().map((t) => ({
+      name: t.name,
+      description: t.description ?? t.name,
+      inputSchema: (t.inputSchema as Tool["inputSchema"]) ?? {
+        type: "object" as const,
+        properties: {},
+      },
+    }));
 
-  process.stderr.write(`[Salla MCP] Tool called: ${name}\n`);
+    const actionTools: Tool[] = ACTION_TOOLS.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
 
-  // Knowledge layer
-  if (apidogProxy.isKnowledgeTool(name)) {
-    try {
-      await apidogProxy.init();
-      const result = await apidogProxy.callTool(name, safeArgs);
-      return result as { content: Array<{ type: string; text: string }> };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        content: [{ type: "text", text: `Knowledge layer error: ${message}` }],
-        isError: true,
-      };
+    const allTools = [...knowledgeTools, ...actionTools];
+
+    process.stderr.write(
+      `[Salla MCP] Serving ${knowledgeTools.length} knowledge tools + ${actionTools.length} action tools\n`
+    );
+
+    return { tools: allTools };
+  });
+
+  // ── tools/call ───────────────────────────────────────────────────────────
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    const safeArgs = (args ?? {}) as Record<string, unknown>;
+
+    process.stderr.write(`[Salla MCP] Tool called: ${name}\n`);
+
+    // Knowledge layer
+    if (apidogProxy.isKnowledgeTool(name)) {
+      try {
+        await apidogProxy.init();
+        const result = await apidogProxy.callTool(name, safeArgs);
+        return result as { content: Array<{ type: string; text: string }> };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text", text: `Knowledge layer error: ${message}` }],
+          isError: true,
+        };
+      }
     }
-  }
 
-  // Action layer
-  if (ACTION_TOOLS.some((t) => t.name === name)) {
-    try {
-      return await executeActionTool(name, safeArgs);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        content: [{ type: "text", text: `Action layer error: ${message}` }],
-        isError: true,
-      };
+    // Action layer
+    if (ACTION_TOOLS.some((t) => t.name === name)) {
+      try {
+        return await executeActionTool(name, safeArgs);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text", text: `Action layer error: ${message}` }],
+          isError: true,
+        };
+      }
     }
-  }
 
-  return {
-    content: [{ type: "text", text: `Unknown tool: "${name}"` }],
-    isError: true,
-  };
-});
+    return {
+      content: [{ type: "text", text: `Unknown tool: "${name}"` }],
+      isError: true,
+    };
+  });
+
+  return server;
+}
 
 // ── Start ──────────────────────────────────────────────────────────────────
 async function main() {
@@ -146,9 +149,10 @@ async function main() {
 
   if (HTTP_MODE) {
     // HTTP/SSE mode — for Railway, Claude.ai, ChatGPT, Lovable
-    startHttpServer(server, PORT);
+    startHttpServer(createMcpServer, PORT);
   } else {
     // stdio mode — for Claude Desktop, Cursor, VS Code
+    const server = createMcpServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
     process.stderr.write("[Salla MCP] Server running — waiting for tool calls\n");

@@ -15,10 +15,13 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 
 export function startHttpServer(
-  mcpServer: Server,
+  createMcpServer: () => Server,
   port: number = 3000
 ): http.Server {
-  const transports = new Map<string, SSEServerTransport>();
+  const sessions = new Map<
+    string,
+    { server: Server; transport: SSEServerTransport }
+  >();
 
   const httpServer = http.createServer(async (req, res) => {
     // ── CORS headers — required for browser-based clients ──────────────
@@ -55,18 +58,44 @@ export function startHttpServer(
     if (req.method === "GET" && url.pathname === "/sse") {
       process.stderr.write("[Salla MCP HTTP] New SSE connection\n");
 
+      const server = createMcpServer();
       const transport = new SSEServerTransport("/messages", res);
       const sessionId = transport.sessionId;
-      transports.set(sessionId, transport);
+
+      sessions.set(sessionId, { server, transport });
 
       res.on("close", () => {
         process.stderr.write(
           `[Salla MCP HTTP] SSE connection closed: ${sessionId}\n`
         );
-        transports.delete(sessionId);
+        sessions.delete(sessionId);
+
+        const closableServer = server as Server & {
+          close?: () => Promise<void> | void;
+        };
+        void Promise.resolve(closableServer.close?.()).catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(
+            `[Salla MCP HTTP] Server close error (${sessionId}): ${message}\n`
+          );
+        });
       });
 
-      await mcpServer.connect(transport);
+      try {
+        await server.connect(transport);
+      } catch (err) {
+        sessions.delete(sessionId);
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `[Salla MCP HTTP] SSE connect error (${sessionId}): ${message}\n`
+        );
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: message }));
+        } else {
+          res.end();
+        }
+      }
       return;
     }
 
@@ -74,7 +103,7 @@ export function startHttpServer(
     if (req.method === "POST" && url.pathname === "/messages") {
       const sessionId = url.searchParams.get("sessionId");
 
-      if (!sessionId || !transports.has(sessionId)) {
+      if (!sessionId || !sessions.has(sessionId)) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid or missing sessionId" }));
         return;
@@ -84,8 +113,14 @@ export function startHttpServer(
       req.on("data", (chunk) => (body += chunk.toString()));
       req.on("end", async () => {
         try {
-          const transport = transports.get(sessionId)!;
-          await transport.handlePostMessage(req, res);
+          const session = sessions.get(sessionId);
+          if (!session) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Session expired" }));
+            return;
+          }
+
+          await session.transport.handlePostMessage(req, res);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           process.stderr.write(`[Salla MCP HTTP] Message error: ${message}\n`);
